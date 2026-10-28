@@ -1,5 +1,15 @@
 # better-tactics
 
+## Chế độ bé (kid mode)
+
+Fork này chỉ để học chiến thuật cờ vua cho trẻ lớp 2, giao diện tiếng Việt. Ván thật chơi ở chỗ khác (ví dụ Duolingo), ở đây chỉ luyện thế cờ.
+
+- Chỉ nhập các bài có rating tối đa 900 (`KID_MAX_RATING`) và thuộc 3 chủ đề: chiếu hết 1 nước (`mateIn1`), ăn quân không được bảo vệ (`hangingPiece`), bắt đôi (`fork`).
+- Không tự chấm Again/Hard/Good/Easy: làm đúng ngay lần đầu, không gợi ý thì tính Good; làm đúng sau khi đi sai hoặc dùng gợi ý thì tính Hard; không có nút Easy.
+- Mỗi buổi tối đa 10 bài (`KID_SESSION_COUNT`), xong thì nghỉ.
+- Cấu hình xem `CONFIG.md`: `KID_MAX_RATING`, `KID_THEMES`, `KID_SESSION_COUNT`.
+- Thuật toán lặp lại (SM-2) và chấm rating (Glicko2) giữ nguyên của bản gốc. Giấy phép GPL-3.0 giữ nguyên, xem `LICENSE`.
+
 Better Tactics is a Chess tactics trainer that uses the concept of <a href="https://en.wikipedia.org/wiki/Spaced_repetition">Spaced Repetition</a> to help you master chess tactics. The idea is to help you improve your tactical pattern recognition and gain experience calcualting tactics, by repeating puzzles you've seen previously over time. Puzzles you complete will get queued up for review daily, and puzzles you find hard will be repeated more
 frequently, while puzzles you find easy will be repeated far less often to make the process more efficient.
 

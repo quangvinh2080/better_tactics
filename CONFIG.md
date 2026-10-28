@@ -16,6 +16,21 @@ The application can be configured by setting the values in <a href="https://gith
 | TACTICS_PUZZLE_RATING_VARIATION_DOWN | 0.05 | The percentage below your rating random puzzles can be shown on the 'next puzzle' page. 0.05 means 5%, so if the user's rating is 1000, the rating for selected puzzles can be as low as 950. |
 | TACTICS_PUZZLE_RATING_VARIATION_UP | 0.0 | The percentage above your rating random puzzles can be shown on the 'next puzzle' page. This is set to 0% by default to avoid showing puzzles too high, but can be changed to the previous default of 0.05 to show puzzles a little above your current rating. |
 
+# Kid mode
+This fork is kid mode throughout: the interface is Vietnamese, puzzles are
+filtered to easy ones in a few themes, grading is automatic, and each
+session is limited. The spaced-repetition and rating code is unchanged.
+
+| Environment Variable | Default | Description |
+| --- | --- | --- |
+| KID_MAX_RATING | 900 | The highest puzzle rating imported or requested. Puzzles above this rating are skipped during the lichess import, and random-puzzle requests are capped at this rating. |
+| KID_THEMES | mateIn1,hangingPiece,fork | Comma-separated lichess themes to import and offer in the theme picker: mateIn1 (checkmate in 1), hangingPiece (win an undefended piece), fork (attack two pieces at once). Only puzzles with at least one of these themes are imported. |
+| KID_SESSION_COUNT | 10 | How many completed puzzles end one session in the frontend (counted in page state only). After that many, the puzzle screen shows the session-done message and stops requesting new puzzles until the page is reloaded. |
+
+Note: KID_MAX_RATING and KID_THEMES only affect the lichess import. Changing
+them after the database has already been imported has no effect until the
+puzzle database is reset and re-imported.
+
 # User Interface
 | Environment Variable | Default | Description |
 | --- | --- | --- |

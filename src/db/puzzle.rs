@@ -162,22 +162,52 @@ impl PuzzleDatabase {
     pub async fn get_puzzles_by_rating(&self, min_rating: i64, max_rating: i64, max_puzzles: i64)
         -> DbResult<Vec<Puzzle>>
     {
+        self.get_puzzles_by_rating_and_theme(min_rating, max_rating, None, max_puzzles).await
+    }
+
+    /// Get a random set of puzzles by rating, optionally filtered to one
+    /// theme. Themes are stored space-separated, so the theme is matched
+    /// as a whole token (surrounded by spaces) rather than a substring.
+    pub async fn get_puzzles_by_rating_and_theme(&self, min_rating: i64, max_rating: i64,
+        theme: Option<&str>, max_puzzles: i64) -> DbResult<Vec<Puzzle>>
+    {
         log::info!("Getting puzzles..");
 
-        let query = sqlx::query_as("
-            SELECT *
-            FROM puzzles
-            WHERE rating >= ?
-            AND rating <= ?
-            ORDER BY random()
-            LIMIT ?");
+        if let Some(theme) = theme {
+            let pattern = format!("% {theme} %");
+            let query = sqlx::query_as("
+                SELECT *
+                FROM puzzles
+                WHERE rating >= ?
+                AND rating <= ?
+                AND (' ' || themes || ' ') LIKE ?
+                ORDER BY random()
+                LIMIT ?");
 
-        Ok(query
-            .bind(min_rating)
-            .bind(max_rating)
-            .bind(max_puzzles)
-            .fetch(&self.pool)
-            .try_collect()
-            .await?)
+            Ok(query
+                .bind(min_rating)
+                .bind(max_rating)
+                .bind(pattern)
+                .bind(max_puzzles)
+                .fetch(&self.pool)
+                .try_collect()
+                .await?)
+        } else {
+            let query = sqlx::query_as("
+                SELECT *
+                FROM puzzles
+                WHERE rating >= ?
+                AND rating <= ?
+                ORDER BY random()
+                LIMIT ?");
+
+            Ok(query
+                .bind(min_rating)
+                .bind(max_rating)
+                .bind(max_puzzles)
+                .fetch(&self.pool)
+                .try_collect()
+                .await?)
+        }
     }
 }

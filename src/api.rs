@@ -18,6 +18,7 @@ pub fn routes(app_state: AppState) -> Router {
     Router::new()
         // Tactics.
         .route("/tactics/random/:min_rating/:max_rating", get(tactics::random_puzzle))
+        .route("/tactics/random/:min_rating/:max_rating/:theme", get(tactics::random_puzzle_by_theme))
         .route("/tactics/random/skip", post(tactics::skip_next))
         .route("/tactics/by_id/:puzzle_id", get(tactics::puzzle_by_id))
         .route("/tactics/review", get(tactics::next_review))

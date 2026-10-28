@@ -2,6 +2,14 @@
 
 {% block content %}
 
+<!-- Kid mode theme picker: large buttons, only on the random-puzzle page -->
+<div id="kid-theme-picker">
+    <a class="button kid-theme-button" data-theme="" href="/tactics/new">Trộn các dạng</a>
+    <a class="button kid-theme-button" data-theme="mateIn1" href="/tactics/new?theme=mateIn1">Chiếu hết 1 nước</a>
+    <a class="button kid-theme-button" data-theme="hangingPiece" href="/tactics/new?theme=hangingPiece">Ăn quân treo</a>
+    <a class="button kid-theme-button" data-theme="fork" href="/tactics/new?theme=fork">Bắt đôi</a>
+</div>
+
 <!-- The main puzzle interface, with the puzzle and other panels in it -->
 <div class="columns" id="puzzle-interface">
 </div>
@@ -18,10 +26,34 @@
     const puzzle_rating_variation_up = {{ tactics_config.puzzle_rating_variation_up }};
     const puzzle_rating_variation_down = {{ tactics_config.puzzle_rating_variation_down }};
 
+    // Kid mode: the theme comes from ?theme=, validated against the
+    // configured kid themes. The rating request is capped at the kid
+    // ceiling, and the session stops after the configured count.
+    const kid_max_rating = {{ kid_max_rating }};
+    const kid_session_count = {{ kid_session_count }};
+    const kid_themes = "{{ kid_themes }}".split(",").filter(t => t.length > 0);
+    const url_theme = new URLSearchParams(window.location.search).get("theme");
+    const kid_theme = kid_themes.includes(url_theme) ? url_theme : null;
+
+    // Highlight the active theme button; hide the picker off the
+    // random-puzzle page.
+    const picker = document.getElementById("kid-theme-picker");
+    if (mode != "Random") {
+        picker.style.display = "none";
+    } else {
+        picker.querySelectorAll(".kid-theme-button").forEach(button => {
+            if (button.dataset.theme === (kid_theme || "")) {
+                button.classList.add("is-active");
+            }
+        });
+    }
+
     // Create puzzle ui.
     let puzzle_ui = new PuzzleUi(document.getElementById("puzzle-interface"), {
         mode,
         requested_id,
+        kid_theme,
+        session_limit: kid_session_count,
         on_review: submit_review,
         request_data: request_next_puzzle,
         on_skip: on_skip,
@@ -36,7 +68,7 @@
     function request_stats() {
         return $.ajax(`/api/user/stats`)
             .catch(function(err) {
-                let error_text = `Failed to get user stats: ${err.responseText}`;
+                let error_text = `Không lấy được thông tin: ${err.responseText}`;
                 console.error(error_text);
                 puzzle_ui.configure({error: error_text});
             });
@@ -73,14 +105,17 @@
                         });
                 }
                 else {
-                    // Random in range.
+                    // Random in range, capped at the kid ceiling.
                     let min_rating = stats.user_rating.rating -
                         Math.floor(stats.user_rating.rating * puzzle_rating_variation_down);
-                    let max_rating = stats.user_rating.rating +
-                        Math.floor(stats.user_rating.rating * puzzle_rating_variation_up);
+                    let max_rating = Math.min(stats.user_rating.rating +
+                        Math.floor(stats.user_rating.rating * puzzle_rating_variation_up), kid_max_rating);
                     puzzle_ui.configure({ rating_range: [min_rating, max_rating] });
 
-                    return $.ajax(`/api/tactics/random/${min_rating}/${max_rating}`)
+                    let random_url = kid_theme
+                        ? `/api/tactics/random/${min_rating}/${max_rating}/${kid_theme}`
+                        : `/api/tactics/random/${min_rating}/${max_rating}`;
+                    return $.ajax(random_url)
                         .then(data => {
                             return Promise.resolve(Object.assign(data, { stats }));
                         });

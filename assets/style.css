@@ -743,3 +743,34 @@ a[disabled] {
         margin-bottom: 1rem;
     }
 }
+
+/* Kid mode: large theme buttons, large next-puzzle button, session-done text */
+#kid-theme-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: center;
+    margin: 0.5rem 0 1rem 0;
+}
+#kid-theme-picker a.button {
+    min-height: 3.5rem;
+    height: auto;
+    padding: 0.5rem 1rem;
+    font-size: 1.1rem;
+    font-weight: bold;
+    text-decoration: none;
+    white-space: normal;
+}
+#kid-theme-picker a.button.is-active {
+    background: #2e680d;
+}
+.controls-subpanel button#next-puzzle {
+    background: #2e680d;
+    font-size: 1.3rem;
+    width: 100%;
+}
+#session-done p {
+    font-size: 1.3rem;
+    font-weight: bold;
+}
+

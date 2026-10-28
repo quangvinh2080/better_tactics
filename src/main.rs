@@ -56,7 +56,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Initialise puzzle database in background if necessary.
     let cancel_import = Arc::new(AtomicBool::new(false));
     let import_done = Arc::new(AtomicBool::new(false));
-    tokio::spawn(lichess::init_db(puzzle_db.clone(), cancel_import.clone())
+    tokio::spawn(lichess::init_db(puzzle_db.clone(), cancel_import.clone(), app_config.kid.clone())
         .and_then({
             let import_done = import_done.clone();
             let cancel_import = cancel_import.clone();
