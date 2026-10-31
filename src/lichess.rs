@@ -117,12 +117,13 @@ async fn import_lichess_database(mut db: PuzzleDatabase, lichess_db_raw: File,
     /// here, but there's no easy way to tell as we're reading it since we're streaming it from a
     /// file, and this should work in the majority of cases. If it ever changes significantly, we
     /// can just update it.
-    const TOTAL_PUZZLES: usize = 3_500_000;
+    const TOTAL_PUZZLES: usize = 6_200_000;
 
     const PUZZLES_PER_IMPORT_BATCH: usize = 10000;
     const PUZZLES_PER_PROGRESS_UPDATE: usize = 100000;
 
-    // We expect 10 rows per puzzle entry.
+    // We expect at least 10 fields per puzzle entry. The 2026 lichess file
+    // appends an 11th (DailyDate) column after the original 10; it is ignored.
     const EXPECTED_ROWS: usize = 10;
 
     log::info!("Importing lichess puzzle database in background...");
@@ -155,7 +156,7 @@ async fn import_lichess_database(mut db: PuzzleDatabase, lichess_db_raw: File,
                 break;
             }
 
-            if record.len() != EXPECTED_ROWS {
+            if record.len() < EXPECTED_ROWS {
                 log::warn!("Skipping record with {} entries, expected at least {}",
                     record.len(), EXPECTED_ROWS);
                 continue;
