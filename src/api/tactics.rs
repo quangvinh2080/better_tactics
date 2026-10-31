@@ -183,7 +183,7 @@ pub async fn random_puzzle_by_theme(
 /// so switching themes from the kid theme picker does not get stuck on
 /// a puzzle from the previous theme.
 async fn random_puzzle_inner(
-    mut state: State<AppState>,
+    mut state: AppState,
     min_rating: i64,
     max_rating: i64,
     theme: Option<String>,
