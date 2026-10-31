@@ -6,7 +6,7 @@ COPY . .
 
 # Install node/npm using nvm.
 ENV NODE_VERSION=21.1.0
-RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+# curl, tar and gzip are already in the rust:1.67 image; no apt needed.
 RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
 ENV PATH="/root/.nvm/versions/node/v${NODE_VERSION}/bin:${PATH}"
 
