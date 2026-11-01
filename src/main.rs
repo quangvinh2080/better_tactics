@@ -2,6 +2,8 @@ mod api;
 mod assets;
 mod app;
 mod controllers;
+mod pwa;
+mod pwa_icons;
 mod db;
 mod lichess;
 mod rating;
