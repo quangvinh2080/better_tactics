@@ -441,7 +441,7 @@ impl PuzzleDatabase {
                         .map_err(|e| DatabaseError::ParsingError(ErrorDetails {
                             backend: "srs".to_string(),
                             description: e.to_string(),
-                            source: Some(e),
+                            source: Some(Box::new(e)),
                         }))?,
                     user_rating: row.try_get("user_rating").ok(),
                 }) as DbResult<Review>
