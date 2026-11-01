@@ -1,7 +1,7 @@
 use chrono::Local;
 
 use crate::app::AppConfig;
-use crate::db::{PuzzleDatabase, Puzzle, Review, PuzzleHistoryEntry};
+use crate::db::{ChessReview, PuzzleDatabase, Puzzle, Review, PuzzleHistoryEntry};
 use crate::rating::Rating;
 use crate::srs::{Card, Difficulty, ReviewOrder};
 use crate::time::LocalTimeProvider;
@@ -166,6 +166,31 @@ impl TacticsService {
         Ok(self.db
             .get_distinct_puzzle_history(user_id, offset, count)
             .await?)
+    }
+
+    /// Get all passing reviews for the reward-service endpoint, with the
+    /// new/review kind decided by first passing review per puzzle.
+    pub async fn get_chess_reviews(&self, user_id: &str)
+        -> ServiceResult<Vec<ChessReview>>
+    {
+        let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+        Ok(self.db
+            .get_passing_reviews(user_id)
+            .await?
+            .into_iter()
+            .map(|review| {
+                let kind = if seen.insert(review.puzzle_id.clone()) { "moi" } else { "on" };
+                let date = review.date.to_rfc3339();
+                let difficulty = review.difficulty.to_i64();
+                ChessReview {
+                    key: format!("{}|{}|{}", review.puzzle_id, date, difficulty),
+                    puzzle_id: review.puzzle_id,
+                    kind: kind.to_string(),
+                    difficulty,
+                    date,
+                }
+            })
+            .collect())
     }
 
     pub async fn skip_puzzle(&mut self, user_id: &str, puzzle: &Puzzle)

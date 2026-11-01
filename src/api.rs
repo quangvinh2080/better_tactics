@@ -30,6 +30,7 @@ pub fn routes(app_state: AppState) -> Router {
         .route("/user/review_forecast/:length_days", axum::routing::get(user::review_forecast))
         .route("/user/rating_history", axum::routing::get(user::rating_history))
         .route("/user/review_score_histogram/:bucket_size", axum::routing::get(user::review_score_histogram))
+        .route("/user/chess-reviews", axum::routing::get(user::chess_reviews))
         .route("/user/reset_rating/:new_rating", axum::routing::get(user::reset_rating))
 
         .fallback(not_found)
