@@ -37,6 +37,9 @@ pub struct PuzzleTemplate {
     mode: PuzzleMode,
     tactics_config: TacticsConfig,
     ui_config: UiConfig,
+    kid_max_rating: i64,
+    kid_session_count: i64,
+    kid_themes: String,
     requested_id: String,
 }
 
@@ -65,6 +68,9 @@ pub async fn specific_puzzle(
         mode: PuzzleMode::Specific,
         tactics_config: state.app_config.tactics,
         ui_config: state.app_config.ui,
+        kid_max_rating: state.app_config.kid.max_rating,
+        kid_session_count: state.app_config.kid.session_count,
+        kid_themes: state.app_config.kid.themes.join(","),
         requested_id: puzzle_id,
     })
 }
@@ -79,6 +85,9 @@ pub async fn random_puzzle(
         mode: PuzzleMode::Random,
         tactics_config: state.app_config.tactics,
         ui_config: state.app_config.ui,
+        kid_max_rating: state.app_config.kid.max_rating,
+        kid_session_count: state.app_config.kid.session_count,
+        kid_themes: state.app_config.kid.themes.join(","),
         requested_id: "".to_string(),
     })
 }
@@ -93,6 +102,9 @@ pub async fn next_review(
         mode: PuzzleMode::Review,
         tactics_config: state.app_config.tactics,
         ui_config: state.app_config.ui,
+        kid_max_rating: state.app_config.kid.max_rating,
+        kid_session_count: state.app_config.kid.session_count,
+        kid_themes: state.app_config.kid.themes.join(","),
         requested_id: "".to_string(),
     })
 }

@@ -70,7 +70,7 @@ export class PuzzleHistory {
             console.error(err);
         }
 
-        return h(this.container_tag + '.error.fatal', `Error when building view: ${error_text}`);
+        return h(this.container_tag + '.error.fatal', `Lỗi khi hiển thị: ${error_text}`);
     }
 
     error() {
@@ -94,25 +94,25 @@ export class PuzzleHistory {
                 h('a', {
                     attrs: { disabled: this.config.page <= 1 },
                     on: { click: this.prev_page.bind(this) },
-                }, 'Previous')
+                }, 'Trước')
             ]),
-            h('div', `Page ${this.config.page} of ${this.data.num_pages}`),
+            h('div', `Trang ${this.config.page} / ${this.data.num_pages}`),
             h('div', [
                 h('a', {
                     attrs: { disabled: this.config.page >= this.data.num_pages },
                     on: { click: this.next_page.bind(this) },
-                }, 'Next')
+                }, 'Sau')
             ]),
         ]);
     }
 
     puzzles() {
         if (!this.data) {
-            return h('p', "Loading puzzles...");
+            return h('p', "Đang tải các bài...");
         }
 
         if (!this.data.puzzles || this.data.puzzles.length == 0) {
-            return h('p', `No such page ${this.config.page}`);
+            return h('p', `Không có trang này: ${this.config.page}`);
         }
 
         let puzzles = this.data.puzzles.map(item => {
@@ -132,7 +132,7 @@ export class PuzzleHistory {
                     h('table.stats', [
                         h('tbody', [
                             h('tr', [
-                                h('th', 'Lichess puzzle'),
+                                h('th', 'Bài cờ'),
                                 h('td', [
                                     h('a', { props: { href: `/tactics/by_id/${puzzle.puzzle_id}` } },
                                         puzzle.puzzle_id),
@@ -149,10 +149,10 @@ export class PuzzleHistory {
     }
 
     difficulty_row(item) {
-        let difficulty_text = item.skipped ? 'Skipped' : this.difficulty_to_string(item.difficulty);
+        let difficulty_text = item.skipped ? 'Đã bỏ qua' : this.difficulty_to_string(item.difficulty);
         if (difficulty_text) {
             return h('tr', [
-                h('th', 'Difficulty'),
+                h('th', 'Kết quả'),
                 h('td', difficulty_text),
             ]);
         }
@@ -160,13 +160,13 @@ export class PuzzleHistory {
 
     difficulty_to_string(difficulty) {
         if (difficulty == 0)
-            return "Again";
+            return "Chưa được";
         else if (difficulty == 1)
-            return "Hard";
+            return "Khó";
         else if (difficulty == 2)
-            return "Good";
+            return "Được";
         else if (difficulty == 3)
-            return "Easy";
+            return "Dễ";
     }
 
     request_data() {
@@ -185,7 +185,7 @@ export class PuzzleHistory {
                     this.render();
                 })
                 .catch(err => {
-                    this.data_request_error = `Failed to get puzzle history: ${err.responseJSON.error}`;
+                    this.data_request_error = `Không lấy được lịch sử: ${err.responseJSON.error}`;
                     this.config.loading = false;
                     this.render();
 

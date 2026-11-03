@@ -164,6 +164,31 @@ pub async fn random_puzzle(
     Path((min_rating, max_rating)): Path<(i64, i64)>,
 ) -> ApiResult<Json<CardResponse>>
 {
+    random_puzzle_inner(state, min_rating, max_rating, None).await
+}
+
+/// GET /api/tactics/random/:min_rating/:max_rating/:theme (kid mode).
+/// The theme must be one of the kid themes (see CONFIG.md); an unknown
+/// theme is ignored by the service and behaves like the unthemed route.
+pub async fn random_puzzle_by_theme(
+    State(mut state): State<AppState>,
+    Path((min_rating, max_rating, theme)): Path<(i64, i64, String)>,
+) -> ApiResult<Json<CardResponse>>
+{
+    random_puzzle_inner(state, min_rating, max_rating, Some(theme)).await
+}
+
+/// Shared implementation for the random-puzzle routes. When a theme is
+/// requested, a saved next puzzle is only reused if it has that theme,
+/// so switching themes from the kid theme picker does not get stuck on
+/// a puzzle from the previous theme.
+async fn random_puzzle_inner(
+    mut state: AppState,
+    min_rating: i64,
+    max_rating: i64,
+    theme: Option<String>,
+) -> ApiResult<Json<CardResponse>>
+{
     // TODO: use a JWT to get the user_id.
     let user_id = UserService::local_user_id();
 
@@ -174,7 +199,12 @@ pub async fn random_puzzle(
         // Check that it's not been done yet, if so we can just return the same one.
         let (puzzle, card) = state.tactics_service.get_puzzle_by_id(&saved_next_puzzle).await?;
 
-        if puzzle.is_some() && card.is_none() {
+        let theme_matches = match &theme {
+            Some(theme) => puzzle.as_ref().map(|puzzle| puzzle.themes.contains(theme)).unwrap_or(false),
+            None => true,
+        };
+
+        if theme_matches && puzzle.is_some() && card.is_none() {
             return Ok(Json(CardResponse {
                 puzzle,
                 card: Some(Card::new(&saved_next_puzzle, Local::now().fixed_offset(),
@@ -186,7 +216,7 @@ pub async fn random_puzzle(
 
     // Get the next random puzzle for the user.
     let (puzzle, card) = state.tactics_service
-        .get_random_puzzle(min_rating, max_rating)
+        .get_random_puzzle_with_theme(min_rating, max_rating, theme)
         .await?;
 
     let response = match puzzle {

@@ -18,6 +18,7 @@ pub fn routes(app_state: AppState) -> Router {
     Router::new()
         // Tactics.
         .route("/tactics/random/:min_rating/:max_rating", get(tactics::random_puzzle))
+        .route("/tactics/random/:min_rating/:max_rating/:theme", get(tactics::random_puzzle_by_theme))
         .route("/tactics/random/skip", post(tactics::skip_next))
         .route("/tactics/by_id/:puzzle_id", get(tactics::puzzle_by_id))
         .route("/tactics/review", get(tactics::next_review))
@@ -29,6 +30,7 @@ pub fn routes(app_state: AppState) -> Router {
         .route("/user/review_forecast/:length_days", axum::routing::get(user::review_forecast))
         .route("/user/rating_history", axum::routing::get(user::rating_history))
         .route("/user/review_score_histogram/:bucket_size", axum::routing::get(user::review_score_histogram))
+        .route("/user/chess-reviews", axum::routing::get(user::chess_reviews))
         .route("/user/reset_rating/:new_rating", axum::routing::get(user::reset_rating))
 
         .fallback(not_found)

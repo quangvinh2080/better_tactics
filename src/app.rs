@@ -35,6 +35,7 @@ pub struct AppConfig {
     pub bind_interface: IpAddr,
     pub bind_port: u16,
     pub database_url: DatabaseUrl,
+    pub kid: KidConfig,
     pub tactics: TacticsConfig,
     pub srs: SrsConfig,
     pub backup: BackupConfig,
@@ -67,6 +68,7 @@ impl Default for AppConfig {
             bind_port: 3030,
             database_url: DatabaseUrl(Url::parse("sqlite://puzzles.sqlite")
                 .expect("Failed to parse default database_url")),
+            kid: KidConfig::default(),
             tactics: TacticsConfig::default(),
             srs: SrsConfig::default(),
             backup: BackupConfig::default(),
@@ -80,6 +82,26 @@ impl Default for TacticsConfig {
         Self {
             puzzle_rating_variation_up: 0.0,
             puzzle_rating_variation_down: 0.05,
+        }
+    }
+}
+
+/// Kid mode configuration (see CONFIG.md). The whole fork is kid mode:
+/// only easy puzzles in a few themes are imported, the requested rating
+/// is capped, and each session is limited to a small number of puzzles.
+#[derive(Debug, Clone)]
+pub struct KidConfig {
+    pub max_rating: i64,
+    pub themes: Vec<String>,
+    pub session_count: i64,
+}
+
+impl Default for KidConfig {
+    fn default() -> Self {
+        Self {
+            max_rating: 900,
+            themes: vec!["mateIn1".to_string(), "hangingPiece".to_string(), "fork".to_string()],
+            session_count: 10,
         }
     }
 }
@@ -111,6 +133,15 @@ impl AppConfig {
 
         let defaults: AppConfig = Default::default();
 
+        // Kid mode themes: comma-separated list; an empty value falls back to defaults.
+        let kid_themes: Vec<String> = match Self::env_var::<String>("KID_THEMES")? {
+            Some(themes) => {
+                let parsed: Vec<String> = themes.split(',').map(|t| t.trim().to_string()).filter(|t| !t.is_empty()).collect();
+                if parsed.is_empty() { KidConfig::default().themes } else { parsed }
+            }, 
+            None => KidConfig::default().themes,
+        };
+
         Ok(Self {
             bind_interface: Self::env_var("BIND_INTERFACE")?.unwrap_or(defaults.bind_interface),
             bind_port: Self::env_var("BIND_PORT")?.unwrap_or(defaults.bind_port),
@@ -133,6 +164,13 @@ impl AppConfig {
                     .unwrap_or(defaults.tactics.puzzle_rating_variation_up),
                 puzzle_rating_variation_down: Self::env_var("TACTICS_PUZZLE_RATING_VARIATION_DOWN")?
                     .unwrap_or(defaults.tactics.puzzle_rating_variation_down),
+            },
+            kid: KidConfig {
+                max_rating: Self::env_var("KID_MAX_RATING")?
+                    .unwrap_or(defaults.kid.max_rating),
+                themes: kid_themes,
+                session_count: Self::env_var("KID_SESSION_COUNT")?
+                    .unwrap_or(defaults.kid.session_count),
             },
             backup: BackupConfig {
                 enabled: Self::env_var("BACKUP_ENABLED")?.unwrap_or(defaults.backup.enabled),

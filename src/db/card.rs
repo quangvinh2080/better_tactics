@@ -41,12 +41,26 @@ pub struct PuzzleHistoryEntry {
     pub skipped: bool,
 }
 
+/// One passing review for the reward-service read endpoint.
+/// `kind` is "moi" for the first passing (Hard/Good) review of a puzzle
+/// and "on" for later passing reviews; Again reviews and skips never
+/// appear here. `key` identifies the row for watermarking, since the
+/// reviews table has no row id.
+#[derive(Debug, serde::Serialize)]
+pub struct ChessReview {
+    pub key: String,
+    pub puzzle_id: String,
+    pub kind: String,
+    pub difficulty: i64,
+    pub date: String,
+}
+
 impl<'r> sqlx::FromRow<'r, SqliteRow> for Review
 {
     fn from_row(row: &'r SqliteRow) -> Result<Self, sqlx::Error> {
         Ok(Self {
             user_id: row.try_get("user_id")?,
-            puzzle_id: row.try_get("user_id")?,
+            puzzle_id: row.try_get("puzzle_id")?,
             difficulty: Difficulty::from_i64(row.try_get("difficulty")?)
                 .map_err(|e| sqlx::Error::ColumnDecode {
                     index: "Difficulty".to_string(),
@@ -393,5 +407,46 @@ impl PuzzleDatabase {
             .await?;
 
         Ok((reviews, total_count))
+    }
+
+    /// Get all passing (Hard/Good) reviews for a user, oldest first.
+    /// Again reviews are excluded; the new/review kind is decided by
+    /// the caller from the order of first passing review per puzzle.
+    pub async fn get_passing_reviews(&self, user_id: &str)
+        -> DbResult<Vec<Review>>
+    {
+        let query = sqlx::query("
+            SELECT user_id, puzzle_id, difficulty, date, user_rating
+            FROM reviews
+            WHERE user_id = ? AND difficulty IN (1, 2)
+            ORDER BY datetime(date) ASC, puzzle_id ASC, difficulty ASC
+        ");
+
+        Ok(query
+            .bind(user_id)
+            .fetch(&self.pool)
+            .map(|row| {
+                let row = row?;
+                let date_text: String = row.try_get("date")?;
+                Ok(Review {
+                    user_id: row.try_get("user_id")?,
+                    puzzle_id: row.try_get("puzzle_id")?,
+                    difficulty: Difficulty::from_i64(row.try_get("difficulty")?)
+                        .map_err(|e| DatabaseError::ParsingError(ErrorDetails {
+                            backend: "srs".to_string(),
+                            description: e.to_string(),
+                            source: Some(e),
+                        }))?,
+                    date: DateTime::parse_from_rfc3339(&date_text)
+                        .map_err(|e| DatabaseError::ParsingError(ErrorDetails {
+                            backend: "srs".to_string(),
+                            description: e.to_string(),
+                            source: Some(Box::new(e)),
+                        }))?,
+                    user_rating: row.try_get("user_rating").ok(),
+                }) as DbResult<Review>
+            })
+            .try_collect::<Vec<Review>>()
+            .await?)
     }
 }

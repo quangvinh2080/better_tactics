@@ -5,11 +5,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use csv::StringRecord;
 use futures::StreamExt;
 
+use crate::app::KidConfig;
 use crate::db::{PuzzleDatabase, Puzzle};
 
 /// Initialise the puzzle db if necessary. Returns Ok(true) if the database import was complete,
 /// Ok(false) if the database was already imported, or an error if one occurs.
-pub async fn init_db(db: PuzzleDatabase, cancel_import: Arc<AtomicBool>)
+pub async fn init_db(db: PuzzleDatabase, cancel_import: Arc<AtomicBool>, kid_config: KidConfig)
     -> Result<bool, String>
 {
     let app_data = db.get_app_data("").await
@@ -29,7 +30,7 @@ pub async fn init_db(db: PuzzleDatabase, cancel_import: Arc<AtomicBool>)
 
         // Initialise our database with it.
         if !cancel_import.load(Ordering::Relaxed) {
-            import_lichess_database(db, lichess_db, cancel_import).await
+            import_lichess_database(db, lichess_db, cancel_import, &kid_config).await
                 .map_err(|e| format!("Failed to import lichess puzzle db: {e}"))?;
         }
 
@@ -107,18 +108,22 @@ async fn download_puzzle_db(cancel_import: Arc<AtomicBool>) -> Result<File, Stri
 
 /// Import lichess database from file.
 async fn import_lichess_database(mut db: PuzzleDatabase, lichess_db_raw: File,
-    cancel_import: Arc<AtomicBool>) -> Result<(), String>
+    cancel_import: Arc<AtomicBool>, kid_config: &KidConfig) -> Result<(), String>
 {
-    /// The total number of puzzles in the database. It's a shame to have to have this hardcoded
+    /// The total number of puzzles in the lichess file before kid-mode filtering.
+    /// Kid mode keeps only a small subset (see the filter below), so the
+    /// progress percent below is a percent of puzzles scanned, not kept.
+    /// It's a shame to have to have this hardcoded
     /// here, but there's no easy way to tell as we're reading it since we're streaming it from a
     /// file, and this should work in the majority of cases. If it ever changes significantly, we
     /// can just update it.
-    const TOTAL_PUZZLES: usize = 3_500_000;
+    const TOTAL_PUZZLES: usize = 6_200_000;
 
     const PUZZLES_PER_IMPORT_BATCH: usize = 10000;
     const PUZZLES_PER_PROGRESS_UPDATE: usize = 100000;
 
-    // We expect 10 rows per puzzle entry.
+    // We expect at least 10 fields per puzzle entry. The 2026 lichess file
+    // appends an 11th (DailyDate) column after the original 10; it is ignored.
     const EXPECTED_ROWS: usize = 10;
 
     log::info!("Importing lichess puzzle database in background...");
@@ -126,7 +131,9 @@ async fn import_lichess_database(mut db: PuzzleDatabase, lichess_db_raw: File,
     if let Ok(decoder) = zstd::stream::Decoder::new(lichess_db_raw) {
         let mut csv_reader = csv::Reader::from_reader(decoder);
 
-        let mut puzzles_imported = 0;
+        let mut puzzles_scanned = 0;
+        let mut puzzles_kept = 0;
+        let mut puzzles_skipped = 0;
         let mut last_report = 0;
 
         let mut puzzles = Vec::new();
@@ -149,45 +156,54 @@ async fn import_lichess_database(mut db: PuzzleDatabase, lichess_db_raw: File,
                 break;
             }
 
-            if record.len() != EXPECTED_ROWS {
+            if record.len() < EXPECTED_ROWS {
                 log::warn!("Skipping record with {} entries, expected at least {}",
                     record.len(), EXPECTED_ROWS);
                 continue;
             }
 
-            // Import puzzle.
-            let puzzle_id = record[0].to_string();
-            let fen = record[1].to_string();
-            let moves = record[2].to_string();
-            let rating = record[3].parse()
+            // Kid mode filter: parse rating and themes first, and skip
+            // everything too hard or outside the kid themes before doing
+            // any more work or inserting anything. Rating and themes are
+            // the only fields needed for this decision.
+            puzzles_scanned += 1;
+            let rating: i64 = record[3].parse()
                 .map_err(|e| format!("Failed to parse rating field {e}"))?;
-            let rating_deviation = record[4].parse()
-                .map_err(|e| format!("Failed to parse rating_deviation field {e}"))?;
-            let popularity = record[5].parse()
-                .map_err(|e| format!("Failed to parse popularity field {e}"))?;
-            let number_of_plays = record[6].parse()
-                .map_err(|e| format!("Failed to parse number_of_plays field {e}"))?;
-            let themes = record[7].to_string().split_whitespace().map(ToString::to_string).collect();
-            let game_url = record[8].to_string();
-            let opening_tags = record[9].to_string().split_whitespace().map(ToString::to_string).collect();
+            let themes: Vec<String> = record[7].to_string().split_whitespace().map(ToString::to_string).collect();
+            let kid_theme = themes.iter().any(|theme| kid_config.themes.contains(theme));
+            if rating > kid_config.max_rating || !kid_theme {
+                puzzles_skipped += 1;
+            } else {
+                let puzzle_id = record[0].to_string();
+                let fen = record[1].to_string();
+                let moves = record[2].to_string();
+                let rating_deviation = record[4].parse()
+                    .map_err(|e| format!("Failed to parse rating_deviation field {e}"))?;
+                let popularity = record[5].parse()
+                    .map_err(|e| format!("Failed to parse popularity field {e}"))?;
+                let number_of_plays = record[6].parse()
+                    .map_err(|e| format!("Failed to parse number_of_plays field {e}"))?;
+                let game_url = record[8].to_string();
+                let opening_tags = record[9].to_string().split_whitespace().map(ToString::to_string).collect();
 
-            puzzles.push(Puzzle {
-                puzzle_id,
-                fen,
-                moves,
-                rating,
-                rating_deviation,
-                popularity,
-                number_of_plays,
-                themes,
-                game_url,
-                opening_tags,
-            });
-            puzzles_imported += 1;
+                puzzles.push(Puzzle {
+                    puzzle_id,
+                    fen,
+                    moves,
+                    rating,
+                    rating_deviation,
+                    popularity,
+                    number_of_plays,
+                    themes,
+                    game_url,
+                    opening_tags,
+                });
+                puzzles_kept += 1;
+            }
 
             // Bulk insert if we have enough.
             if puzzles.len() >= PUZZLES_PER_IMPORT_BATCH {
-                if puzzles_imported == PUZZLES_PER_IMPORT_BATCH {
+                if puzzles_kept == PUZZLES_PER_IMPORT_BATCH {
                     log::info!("Importing first puzzle batch...");
                 }
 
@@ -196,15 +212,15 @@ async fn import_lichess_database(mut db: PuzzleDatabase, lichess_db_raw: File,
                 puzzles.clear();
             }
 
-            if puzzles_imported - last_report >= PUZZLES_PER_PROGRESS_UPDATE {
-                last_report = puzzles_imported;
+            if puzzles_scanned - last_report >= PUZZLES_PER_PROGRESS_UPDATE {
+                last_report = puzzles_scanned;
 
-                // Calculate imported percent.
-                let percent = 100.0 * puzzles_imported as f64 / TOTAL_PUZZLES as f64;
+                // Calculate scanned percent (of the pre-filter total).
+                let percent = 100.0 * puzzles_scanned as f64 / TOTAL_PUZZLES as f64;
                 // Round it to the nearest .5.
                 let percent = f64::floor(2.0 * percent) / 2.0;
 
-                log::info!("Puzzle database: {puzzles_imported} puzzles ({percent:.1}%) imported...");
+                log::info!("Puzzle database: {puzzles_scanned} puzzles scanned ({percent:.1}%), {puzzles_kept} kept, {puzzles_skipped} skipped...");
             }
         }
 
@@ -223,7 +239,7 @@ async fn import_lichess_database(mut db: PuzzleDatabase, lichess_db_raw: File,
         db.set_app_data(&app_data).await
             .map_err(|e| format!("Failed to update app data: {e}"))?;
 
-        log::info!("Finished importing {puzzles_imported} puzzles");
+        log::info!("Finished importing {puzzles_kept} puzzles ({puzzles_skipped} skipped, {puzzles_scanned} scanned)");
     }
 
     Ok(())

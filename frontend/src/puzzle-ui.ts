@@ -39,6 +39,13 @@ export class PuzzleUi {
     first_try: boolean = true;
     hint_used: boolean = false;
 
+    // Kid mode: frontend-only session state. Counts completed puzzles in
+    // this page session; the limit comes from the page config.
+    session_completed: number = 0;
+    session_limit: number = 10;
+    session_finished: boolean = false;
+    kid_theme: string = null;
+
     puzzle: PuzzleBoard = null;
 
     countdown_interval: number = null;
@@ -109,6 +116,16 @@ export class PuzzleUi {
             });
         }
 
+        // Kid mode settings arrive with the page config. They are only
+        // present on the first configure() call, so keep previous values
+        // when later data updates do not carry them.
+        if (typeof config.session_limit === "number") {
+            this.session_limit = config.session_limit;
+        }
+        if (config.kid_theme !== undefined) {
+            this.kid_theme = config.kid_theme;
+        }
+
         // Store whether it's currently the first try or not, so we know if it's a successful solve or not.
         this.first_try = true;
         this.hint_used = false;
@@ -129,12 +146,17 @@ export class PuzzleUi {
                 console.error(err);
             }
 
-            let error_view = h('div.error.fatal', `Error when building view: ${error_text}`);
+            let error_view = h('div.error.fatal', `Lỗi khi hiển thị: ${error_text}`);
             this.vnode = patch(this.vnode, error_view);
         }
     }
 
     request_data() {
+        if (this.session_finished) {
+            this.config.loading = false;
+            this.render();
+            return;
+        }
         if (typeof this.config.request_data === "function") {
             console.log("Puzzle ui: requesting data");
             this.config.error = null;
@@ -149,7 +171,7 @@ export class PuzzleUi {
                     this.render();
                 })
                 .catch(err => {
-                    this.config.error = `Failed to get data: ${err.responseJSON.error}`;
+                    this.config.error = `Không lấy được bài: ${err.responseJSON.error}`;
                     this.config.loading = false;
                     this.render();
 
@@ -186,39 +208,56 @@ export class PuzzleUi {
         return h('div#top-bar.columns.bt-panel', this.topbar_contents());
     }
 
+    goal_text() {
+        if (this.kid_theme == 'mateIn1') {
+            return 'Tìm nước chiếu hết trong 1 nước';
+        }
+        else if (this.kid_theme == 'hangingPiece') {
+            return 'Tìm nước ăn quân không được bảo vệ';
+        }
+        else if (this.kid_theme == 'fork') {
+            return 'Tìm nước bắt đôi';
+        }
+        return 'Tìm nước đi tốt nhất';
+    }
+
+    session_done_text() {
+        return `Hôm nay xong rồi, nghỉ nhé! (${this.session_completed} bài)`;
+    }
+
     topbar_contents() {
         if (this.config.error) {
-            return h('div.error.fatal', [ 'Error: ', this.config.error ]);
+            return h('div.error.fatal', [ 'Lỗi: ', this.config.error ]);
+        }
+        else if (this.session_finished) {
+            return h('p', [ this.session_done_text() ]);
         }
         else if (this.config.loading) {
-            return 'Loading next puzzle...';
+            return 'Đang lấy bài tiếp theo...';
         }
         else if (this.config.mode) {
             let mode = this.config.mode;
             if (mode == "Random") {
                 if (this.config.puzzle) {
-                    let [min, max] = this.config.rating_range ? this.config.rating_range : [0, 0];
-                    return `Reviewing random puzzle in rating range ${min}-${max}`;
+                    // Kid mode: show the goal, never the rating range.
+                    return this.goal_text();
                 }
                 else {
-                    return "No puzzles found in category and rating range";
+                    return "Không tìm thấy bài nào, thử lại nhé";
                 }
             }
             else if (mode == "Specific") {
                 if (this.config.puzzle) {
-                    let puzzle_id = this.config.puzzle.puzzle_id;
-                    let review_count = this.config.card ? this.config.card.review_count : 0;
-                    let unseen = review_count > 0 ? "" : " (unseen)";
-                    return `Reviewing specific puzzle ${puzzle_id}${unseen}`;
+                    return this.goal_text();
                 }
                 else {
-                    return 'No such puzzle';
+                    return 'Không có bài này';
                 }
             }
             else if (mode == "Review" && this.config.stats) {
                 if (this.config.puzzle) {
                     let reviews_left = this.config.stats.reviews_due_now;
-                    return `Reviewing next puzzle (${reviews_left} reviews left)`;
+                    return `Đang ôn bài tiếp theo (còn ${reviews_left} bài)`;
                 }
                 else {
                     let due = 'unknown';
@@ -228,23 +267,23 @@ export class PuzzleUi {
                     }
 
                     let done_text = this.config.stats.reviews_due_today > 0
-                        ? `You are done with reviews for now, the next review is due in ${due}.`
-                        : 'You are done with reviews for today!';
+                        ? `Bạn đã ôn xong rồi, bài ôn tiếp theo sau ${due}.`
+                        : 'Bạn đã ôn xong hôm nay rồi!';
 
                     return h('p', [
                         done_text,
                         h('br'),
-                        "Perhaps it's time to try some ",
-                        h('a', { props: { href: '/tactics/new' } }, 'new puzzles'),
-                        '? Or you can return to the ',
-                        h('a', { props: { href: '/' } }, 'main page'),
-                        ' to see your stats.'
+                        "Thử thêm ",
+                        h('a', { props: { href: '/tactics/new' } }, 'bài mới'),
+                        ' nhé? Hoặc quay về ',
+                        h('a', { props: { href: '/' } }, 'trang chính'),
+                        '.'
                     ]);
                 }
             }
         }
 
-        return 'error';
+        return 'Lỗi';
     }
 
     promotion_ui() {
@@ -284,21 +323,25 @@ export class PuzzleUi {
     }
 
     sidebar() {
+        if (this.session_finished) {
+            return h('div.column.sidebar', [
+                h('div#session-done.bt-panel.controls-subpanel', [
+                    h('p', this.session_done_text()),
+                ]),
+            ]);
+        }
         if (this.puzzle && this.config.puzzle && !this.config.loading) {
             return h('div.column.sidebar', [
                 this.move_controls(),
                 this.puzzle_info(),
-                this.card_stats(),
                 this.side_to_move(),
                 this.wrong_move(),
                 this.hint_button(),
                 this.puzzle_complete(),
+                this.puzzle_themes(),
                 this.reviewing_ahead(),
                 this.skip_button(),
-                this.dont_repeat_button(),
-                this.too_easy_button(),
                 this.too_hard_button(),
-                this.puzzle_themes(),
             ]);
         }
     }
@@ -308,19 +351,11 @@ export class PuzzleUi {
             h('table.stats', [
                 h('tbody', [
                     h('tr', [
-                        h('th', 'Lichess puzzle'),
+                        h('th', 'Bài cờ'),
                         h('td', [
                             h('a', { props: { href: `/tactics/by_id/${this.config.puzzle.puzzle_id}` } },
                                 this.config.puzzle.puzzle_id),
                         ]),
-                    ]),
-                    h('tr', [
-                        h('th', 'Puzzle rating'),
-                        h('td', this.puzzle.is_complete() ? this.config.puzzle.rating : '?'),
-                    ]),
-                    h('tr', [
-                        h('th', 'User rating'),
-                        h('td', this.config.stats ? this.config.stats.user_rating.rating : ''),
                     ]),
                 ]),
             ]),
@@ -376,18 +411,22 @@ export class PuzzleUi {
     puzzle_themes() {
         if (this.puzzle.is_complete() && this.config.puzzle.themes.length > 0)
         {
+            let theme_names: { [key: string]: string } = {
+                'mateIn1': 'Chiếu hết 1 nước',
+                'hangingPiece': 'Ăn quân treo',
+                'fork': 'Bắt đôi',
+            };
             let theme_list = this.config.puzzle.themes
-                .map(theme => {
-                    // Convert camel case to a sentence.
-                    return theme.split(/([A-Z][a-z]+)/)
-                        .filter(s => s.length != 0)
-                        .map(s => s.toLowerCase())
-                        .join(' ');
-                })
+                .map(theme => theme_names[theme])
+                .filter(name => name);
+
+            if (theme_list.length == 0) {
+                return;
+            }
 
             return h('div#puzzle-themes.bt-panel', [
                 h('p', [
-                    h('b', 'Themes: '),
+                    h('b', 'Chủ đề: '),
                     theme_list.join(', '),
                 ]),
             ]);
@@ -399,7 +438,7 @@ export class PuzzleUi {
             return h('a.analysis-link', { props: {
                 target: "_blank",
                 href: `https://lichess.org/analysis/standard/${this.analysis_fen}`,
-            } }, "Analyse");
+            } }, "Phân tích");
         }
     }
 
@@ -407,7 +446,7 @@ export class PuzzleUi {
         return h('a.analysis-link', { props: {
             target: "_blank",
             href: `https://lichess.org/training/${this.config.puzzle.puzzle_id}`,
-        } }, "Source");
+        } }, "Nguồn");
     }
 
     card_stats() {
@@ -513,13 +552,13 @@ export class PuzzleUi {
 
             let text;
             if (this.puzzle.computer_to_move()) {
-                text = "Computer to move";
+                text = "Máy đang đi";
             }
             else if (turn == 'w') {
-                text = "White to move";
+                text = "Lượt của Trắng";
             }
             else {
-                text = "Black to move";
+                text = "Lượt của Đen";
             }
 
             return h('div.bt-panel.move-indicator', [
@@ -532,7 +571,7 @@ export class PuzzleUi {
     skip_button() {
         if (this.config.mode == 'Random' && this.puzzle && this.puzzle.is_first_move()) {
             return h('div#skip-button.bt-panel.controls-subpanel', [
-                h('a', { on: { click: this.on_skip_clicked.bind(this) } }, "Skip this puzzle"),
+                h('a', { on: { click: this.on_skip_clicked.bind(this) } }, "Bỏ qua bài này"),
             ]);
         }
     }
@@ -542,25 +581,7 @@ export class PuzzleUi {
         let failed = this.puzzle.is_failed();
         if (this.config.mode == 'Random' && (failed || complete_with_mistakes)) {
             return h('div#too-hard-button.bt-panel.controls-subpanel', [
-                h('a', { on: { click: this.on_too_hard_clicked.bind(this) } }, "Too hard (see easier puzzles)"),
-            ]);
-        }
-    }
-
-    dont_repeat_button() {
-        let is_success = this.puzzle.is_complete() && this.first_try;
-        if (this.config.mode == 'Random' && is_success) {
-            return h('div#dont-repeat.bt-panel.controls-subpanel', [
-                h('a', { on: { click: this.on_dont_repeat_clicked.bind(this) } }, "Don't repeat this puzzle"),
-            ]);
-        }
-    }
-
-    too_easy_button() {
-        let is_success = this.puzzle.is_complete() && this.first_try;
-        if (this.config.mode == 'Random' && is_success) {
-            return h('div#too-easy.bt-panel.controls-subpanel', [
-                h('a', { on: { click: this.on_too_easy_clicked.bind(this) } }, "Too easy (see harder puzzles)"),
+                h('a', { on: { click: this.on_too_hard_clicked.bind(this) } }, "Khó quá, đổi bài dễ hơn"),
             ]);
         }
     }
@@ -568,23 +589,21 @@ export class PuzzleUi {
     reviewing_ahead() {
         if (this.config.puzzle && !this.config.due_today) {
             return h('div#reviewing-ahead.bt-panel.controls-subpanel',
-                "Warning: you are reviewing ahead, which is fine, but it will push this card " +
-                "further into the future each time you complete it.");
+                "Bạn đang ôn trước. Bài này sẽ được hẹn lại xa hơn mỗi lần làm xong.");
         }
     }
 
     wrong_move() {
         if (this.puzzle.is_failed()) {
             return h('div#wrong-move.bt-panel.controls-subpanel', [
-                h('p', 'Wrong move'),
+                h('p', 'Đi sai rồi, thử lại'),
                 h('div.columns.button-container', [
                     h('div.column'),
                     h('div.column', [
                         h('button#try-again.button',
                             { on: { click: () => { this.puzzle.reset(); this.render(); } } },
                             [
-                                h('p.main-text', 'Reset'),
-                                h('p.sub-text', 'Try again'),
+                                h('p.main-text', 'Thử lại'),
                             ],
                         ),
                     ]),
@@ -598,91 +617,30 @@ export class PuzzleUi {
         let ui = this;
 
         if (this.puzzle.is_complete()) {
-            if (this.first_try) {
-                let card = this.config.card;
-                return h('div#reviewing-ahead.bt-panel.controls-subpanel', [
-                    h('p', [
-                        'Puzzle complete',
-                        (this.hint_used ? ' (hint used)' : ''),
-                    ]),
-                    h('div.columns.button-container', [
-                        h('div.column', [
-                            h('button#hard.button.review-button', {
-                                on: { click: function() { ui.on_review_button_clicked(this); } },
-                                dataset: { difficulty: DIFFICULTY_HARD.toString() },
-                                attrs: {
-                                    disabled: this.disable_review_buttons,
-                                    title: card ? this.human_interval(card.next_interval_hard) : null,
-                                },
-                            }, [
-                                h('p.main-text', 'Hard'),
-                                h('p.sub-text', card ? this.fuzzy_duration(card.next_interval_hard) : null),
-                            ]),
-                        ]),
-                        h('div.column', [
-                            h('button#good.button.review-button', {
-                                on: { click: function() { ui.on_review_button_clicked(this); } },
-                                dataset: { difficulty: DIFFICULTY_GOOD.toString() },
-                                attrs: {
-                                    disabled: this.disable_review_buttons,
-                                    title: card ? this.human_interval(card.next_interval_good) : null,
-                                },
-                            }, [
-                                h('p.main-text', 'Good'),
-                                h('p.sub-text', card ? this.fuzzy_duration(card.next_interval_good) : null),
-                            ]),
-                        ]),
-                        h('div.column', [
-                            h('button#easy.button.review-button', {
-                                on: { click: function() { ui.on_review_button_clicked(this); } },
-                                dataset: { difficulty: DIFFICULTY_EASY.toString() },
-                                attrs: {
-                                    disabled: this.disable_review_buttons,
-                                    title: card ? this.human_interval(card.next_interval_easy) : null,
-                                },
-                            }, [
-                                h('p.main-text', 'Easy'),
-                                h('p.sub-text', card ? this.fuzzy_duration(card.next_interval_easy) : null),
-                            ]),
+            // Kid mode auto-grading: no self-scored Again/Hard/Good/Easy
+            // buttons. A clean first try with no hint counts as Good;
+            // solving after a mistake or a hint counts as Hard. There is
+            // no Easy button, so the rating cannot jump by pressing it.
+            let difficulty = (this.first_try && !this.hint_used)
+                ? DIFFICULTY_GOOD
+                : DIFFICULTY_HARD;
+            return h('div#reviewing-ahead.bt-panel.controls-subpanel', [
+                h('p', 'Xong rồi!'),
+                h('div.columns.button-container', [
+                    h('div.column', [
+                        h('button#next-puzzle.button.review-button', {
+                            on: { click: function() { ui.on_review_button_clicked(this); } },
+                            dataset: { difficulty: difficulty.toString() },
+                            attrs: {
+                                disabled: this.disable_review_buttons,
+                            },
+                        }, [
+                            h('p.main-text', 'Bài tiếp theo'),
+                            h('p.sub-text', 'Đã làm ' + (this.session_completed + 1) + '/' + this.session_limit + ' bài'),
                         ]),
                     ]),
-                    h('p', 'Select the difficulty of the puzzle. The next review will be queued ' +
-                        'after the amount of time shown.'),
-                ]);
-            }
-            else {
-                let card = this.config.card;
-                return h('div#reviewing-ahead.bt-panel.controls-subpanel', [
-                    h('p', [
-                        'Puzzle complete',
-                        (this.hint_used ? ' (hint used)' : ' (with mistakes)'),
-                    ]),
-                    h('div.columns.button-container', [
-                        h('div.column'),
-                        h('div.column', [
-                            h('button#again.button.review-button', {
-                                on: { click: function() { ui.on_review_button_clicked(this); } },
-                                dataset: { difficulty: DIFFICULTY_AGAIN.toString() },
-                                attrs: {
-                                    disabled: this.disable_review_buttons,
-                                    title: card ? this.human_interval(card.next_interval_again) : null,
-                                },
-                            }, [
-                                h('p.main-text', 'Again'),
-                                h('p.sub-text', card ? this.fuzzy_duration(card.next_interval_again) : null),
-                            ]),
-                        ]),
-                        h('div.column'),
-                    ]),
-                    h('p', [
-                        h('a.puzzle-link-button',
-                            { on: { click: () => { this.first_try = true; this.render(); } } },
-                            'Submit positive answer anyway'
-                        ),
-                        ' (for example, because of a mouse slip)'
-                    ]),
-                ]);
-            }
+                ]),
+            ]);
         }
     }
 
@@ -693,13 +651,13 @@ export class PuzzleUi {
             let mode = this.puzzle.get_next_move_highlight();
             // If the move is already shown it should be a 'hide hints' button.
             if (mode == 'move')
-                button_text = 'Hide hints';
+                button_text = 'Ẩn gợi ý';
             // If the piece is already highlighted it should be a 'show move' button.
             else if (mode == 'orig')
-                button_text = 'Show hint (move)';
+                button_text = 'Gợi ý nước đi';
             // If nothing is currently highlighted it should be a 'show piece' button.
             else
-                button_text = 'Show hint (piece)';
+                button_text = 'Gợi ý quân';
 
             let disable_button = this.puzzle.computer_to_move() || this.puzzle.awaiting_promotion();
 
@@ -713,7 +671,7 @@ export class PuzzleUi {
     }
 
     on_hint_button_clicked() {
-        // Set first_try to false to show the 'again' button by default if the user needed a hint.
+        // Using a hint means this solve counts as Hard, not Good, in kid mode auto-grading.
         this.first_try = false;
         this.hint_used = true;
 
@@ -774,11 +732,22 @@ export class PuzzleUi {
 
             this.config.on_review(card, difficulty)
                 .then(() => {
-                    console.log("Done, loading next puzzle");
-                    this.request_data();
+                    this.session_completed += 1;
+                    if (this.session_completed >= this.session_limit) {
+                        // Session limit reached: stop here, do not fetch more.
+                        this.session_finished = true;
+                        this.config.puzzle = null;
+                        this.config.loading = false;
+                        this.disable_review_buttons = false;
+                        this.render();
+                    }
+                    else {
+                        console.log("Done, loading next puzzle");
+                        this.request_data();
+                    }
                 })
                 .catch((e) => {
-                    this.config.error = `Failed to submit review: ${e.responseText}`;
+                    this.config.error = `Không gửi được kết quả: ${e.responseText}`;
                     console.error(this.config.error);
                     this.disable_review_buttons = false;
                     this.render();
@@ -787,7 +756,7 @@ export class PuzzleUi {
     }
 
     on_skip_clicked(button) {
-        if (window.confirm("Are you sure you want to skip this puzzle?")) {
+        if (window.confirm("Bạn có chắc muốn bỏ qua bài này không?")) {
             // Skip the puzzle and request a new one. We don't update the rating as the user
             // hasn't solved it, or indicated that it was too hard.
             this.skip_puzzle(DIFFICULTY_GOOD, false);
@@ -795,21 +764,10 @@ export class PuzzleUi {
     }
 
     on_too_hard_clicked(button) {
-        if (window.confirm("Skip this puzzle and see an easier one?")) {
+        if (window.confirm("Bỏ qua bài này và xem bài dễ hơn nhé?")) {
             // Update rating like the puzzle was failed, but don't add it to spaced repetition.
             this.skip_puzzle(DIFFICULTY_AGAIN, true);
         }
-    }
-
-    on_dont_repeat_clicked(button) {
-        // 'Don't repeat' is part of the success dialog, so we should update the rating as if
-        // they'd completed it.
-        this.skip_puzzle(DIFFICULTY_GOOD, true);
-    }
-
-    on_too_easy_clicked(button) {
-        // Update rating like the puzzle was passed, but don't add it to spaced repetition.
-        this.skip_puzzle(DIFFICULTY_EASY, true);
     }
 
     // Scroll wheel.
@@ -834,7 +792,7 @@ export class PuzzleUi {
                     this.request_data();
                 })
                 .catch((e) => {
-                    this.config.error = `Failed to skip puzzle: ${e.responseText}`;
+                    this.config.error = `Không bỏ qua được bài: ${e.responseText}`;
                     console.error(this.config.error);
                     this.disable_review_buttons = false;
                     this.render();

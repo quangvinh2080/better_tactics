@@ -27,6 +27,9 @@ pub fn routes(app_state: AppState) -> Router {
         .route("/tactics/by_id/:puzzle_id", axum::routing::get(puzzle::specific_puzzle))
         .route("/tactics/history", axum::routing::get(puzzle::puzzle_history))
 
+        .route("/manifest.webmanifest", axum::routing::get(crate::pwa::manifest))
+        .route("/sw.js", axum::routing::get(crate::pwa::service_worker))
+        .route("/icons/:name", axum::routing::get(crate::pwa::icon))
         .fallback(not_found)
 
         .with_state(app_state)

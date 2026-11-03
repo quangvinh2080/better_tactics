@@ -4,6 +4,7 @@ use serde_json::Value;
 
 use crate::api::{ApiError, ApiResponse};
 use crate::app::AppState;
+use crate::db::ChessReview;
 use crate::services::user_service::UserService;
 
 /// Reset the user's rating to the specified value.
@@ -122,4 +123,16 @@ pub async fn review_score_histogram(
     );
 
     Ok(json_data.into())
+}
+
+/// Get all passing reviews for the reward service, oldest first.
+/// Each row carries its new/review kind and a watermark key; Again
+/// reviews and skips are not included.
+pub async fn chess_reviews(State(state): State<AppState>)
+    -> Result<Json<Vec<ChessReview>>, ApiError>
+{
+    // TODO: use a JWT to get the user_id.
+    let user_id = UserService::local_user_id();
+
+    Ok(state.tactics_service.get_chess_reviews(user_id).await?.into())
 }
